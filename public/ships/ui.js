@@ -18,7 +18,8 @@ import { formatOf, PICTURE_FORMATS, UP_AXES, FORWARD_AXES } from '../vesselcatal
 import { vesselModels, findIn, FOLDER_URL, modelBlob, saveModel } from '../vessellibrary.js';
 import { PROMPT, BOW_PROMPTS, bowVote, parseDescription, mergeDescriptions, slotFor, SLOTS, kindFor } from './vision.js';
 import { aspect } from './photomodel.js';
-import { readPicture, cutPhoto, buildVessel } from './vesselbuilder.js';
+import { readPicture, cutPhoto, buildVessel, buildLowPoly } from './vesselbuilder.js';
+import { LOWPOLY_PROMPT, parseLowPoly } from './lowpoly.js';
 import { aiCutout, aiDescribe, aiDevice, MODEL_SIZES } from './ai.js';
 import { loadGithub, commitVessel, vesselFileBase, branchFromBuild } from '../github.js';
 import { lookupImo, validImo, proxyBase, siteUrl, kindFromType } from '../maritimedb.js';
@@ -36,6 +37,7 @@ const SOURCE = {
   device: ['own', 'Her own model, saved on this device'],
   upload: ['file', 'From a model file'],
   photos: ['photos', 'Built from her photos'],
+  lowpoly: ['photos', 'Low-poly, from what the AI saw'],
   type: ['type', 'Built from her type and size'],
 };
 // The flag by the first digits of the MMSI (the Maritime Identification Digits), for the common ones.
@@ -91,7 +93,8 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
     busy: null, // { text, progress: { [file]: { loaded, total } } }
     error: null,
     notes: [],
-    prefer: 'photos',
+    prefer: 'photos', // her shape: 'photos' (carved, refined from the low-poly), 'lowpoly' or 'type'
+    lowpoly: null, // the low-poly OBJ last made: { obj, mtl }
     texTarget: '*',
     save: { text: '', tone: '', link: '' },
     units: 'metric',
@@ -368,6 +371,21 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
         p.flip = s.flip;
         p.guessed = s.guessed;
         if (['port', 'starboard', 'top'].includes(p.slot)) p.cut = cutPhoto(p.img, { alpha: p.alpha, view: p.slot });
+        // seen from the side: her structure as low-poly blocks, her first model before any carving
+        if (st.useAi.describe && p.cut.sil && (p.slot === 'port' || p.slot === 'starboard')) {
+          try {
+            p.raw = '';
+            st.busy.text = `Seeing her shape in photo ${n} as blocks…`;
+            render('busy');
+            const r = await aiDescribe(p.img, LOWPOLY_PROMPT, {
+              maxTokens: 480,
+              onToken: (t) => { p.raw += t; if (st.busy) { st.busy.text = `Seeing her shape in photo ${n} as blocks: ${p.raw.slice(-60)}`; render('busy'); } },
+            });
+            p.plan = parseLowPoly(r.text);
+            if (!p.plan) p.warn = 'The AI\'s blocks for her shape could not be read; she is carved from the outline only.';
+          } catch { p.plan = null; }
+          if (p.plan && my === seq && st.view?.source !== 'lowpoly') await showLowPoly(p);
+        }
         p.status = p.cut.sil ? 'done' : 'error';
         if (!p.cut.sil) p.error = 'No vessel found in it';
         render('photos');
@@ -391,9 +409,30 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
     }
   }
 
+  /** The side photo whose blocks make her low-poly model: the widest of those with a plan. */
+  const planned = () => st.photos.filter((p) => p.plan && p.cut?.sil && (p.slot === 'port' || p.slot === 'starboard'))
+    .sort((a, b) => aspect(b.cut.sil) - aspect(a.cut.sil))[0] ?? null;
+
+  /** Her low-poly model from a side photo's plan (lowpoly.js), shown as her model. */
+  async function showLowPoly(p) {
+    const my = seq;
+    try {
+      const r = await buildLowPoly({ photo: { sil: p.cut.sil, data: p.cut.data, slot: p.slot, flip: p.flip }, plan: p.plan, desc: st.desc ?? p.desc, dims: dimsFor(), fallbackKind: st.vessel.kind });
+      if (my !== seq) { r.model.dispose(); return false; }
+      st.lowpoly = { obj: r.obj, mtl: r.mtl };
+      st.buildError = null;
+      show({ model: r.model, source: 'lowpoly', notes: r.notes });
+      return true;
+    } catch (e) {
+      st.buildError = `The low-poly model could not be made: ${e.message}`;
+      return false;
+    }
+  }
+
   function build() {
     const photos = st.photos.filter((p) => p.cut?.sil).map((p) => ({ img: p.img, sil: p.cut.sil, data: p.cut.data, slot: p.slot, flip: p.flip }));
     if (!photos.length) { render('photos'); return; }
+    if (st.prefer === 'lowpoly' && planned()) { showLowPoly(planned()).then(() => render('photos')); return; }
     try {
       const r = buildVessel({ photos, desc: st.desc, dims: dimsFor(), fallbackKind: st.vessel.kind, prefer: st.prefer });
       st.buildError = null;
@@ -652,7 +691,8 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
       ${st.view?.notes?.length ? `<ul class="vb-notes">${st.view.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
       ${st.photos.length ? `<div class="row vb-row">
         <button type="button" class="primary" data-act="build" ${st.busy || !st.photos.some((p) => p.cut?.sil) ? 'disabled' : ''}>Build again</button>
-        ${sides ? `<label class="vb-check"><input type="checkbox" data-act="prefer" ${st.prefer === 'type' ? 'checked' : ''}> Shape from her type</label>` : ''}
+        ${sides ? `<label class="vb-check">Shape <select data-act="prefer">${[['photos', 'carved from the photos'], ['lowpoly', 'low-poly blocks'], ['type', 'from her type']].filter(([k]) => k !== 'lowpoly' || planned()).map(([k, l]) => `<option value="${k}" ${k === st.prefer ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : ''}
+        ${st.lowpoly ? '<button type="button" data-act="download-obj">Low-poly .obj</button>' : ''}
         <button type="button" data-act="clear-photos" ${st.busy ? 'disabled' : ''}>Clear</button>
       </div>` : ''}
       <details class="vb-ai">
@@ -708,6 +748,7 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
     st.vessel = v;
     st.photos = [];
     st.desc = null;
+    st.lowpoly = null;
     st.error = null;
     st.save = { text: '', tone: '', link: '' };
     st.typed = new Set();
@@ -733,7 +774,13 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
     if (a === 'pick-photos') $('[data-pick="photos"]').click();
     else if (a === 'pick-files') $('[data-pick="files"]').click();
     else if (a === 'build') build();
-    else if (a === 'clear-photos') { st.photos = []; st.desc = null; showFromType(); render('photos'); }
+    else if (a === 'clear-photos') { st.photos = []; st.desc = null; st.lowpoly = null; showFromType(); render('photos'); }
+    else if (a === 'download-obj' && st.lowpoly) {
+      const base = vesselFileBase(keys());
+      // the OBJ names its colours as lowpoly.mtl: named after her, both files
+      downloadBlob(`${base}.obj`, new Blob([st.lowpoly.obj.replace('mtllib lowpoly.mtl', `mtllib ${base}.mtl`)], { type: 'text/plain' }));
+      downloadBlob(`${base}.mtl`, new Blob([st.lowpoly.mtl], { type: 'text/plain' }));
+    }
     else if (a === 'callouts') {
       st.callouts = !st.callouts;
       b.setAttribute('aria-pressed', String(st.callouts));
@@ -764,7 +811,7 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
       return;
     }
     if (t.dataset.ai) { st.useAi[t.dataset.ai] = t.checked; return; }
-    if (t.dataset.act === 'prefer') { st.prefer = t.checked ? 'type' : 'photos'; build(); return; }
+    if (t.dataset.act === 'prefer') { st.prefer = t.value; build(); return; }
     if (t.dataset.act === 'tex-target') { st.texTarget = t.value; return; }
     if (t.dataset.fit && st.view?.fit) {
       const fit = { ...st.view.fit, [t.dataset.fit]: t.value };
