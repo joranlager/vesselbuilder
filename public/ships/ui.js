@@ -21,6 +21,7 @@ import { aspect } from './photomodel.js';
 import { readPicture, cutPhoto, buildVessel } from './vesselbuilder.js';
 import { aiCutout, aiDescribe, aiDevice, MODEL_SIZES } from './ai.js';
 import { loadGithub, commitVessel, vesselFileBase, branchFromBuild } from '../github.js';
+import { lookupImo, validImo, proxyBase, siteUrl, kindFromType } from '../maritimedb.js';
 import * as THREE from '../vendor/three.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -72,7 +73,7 @@ function downloadBlob(filename, blob) {
 }
 
 /** A vessel with nothing known yet: typed in, or the start screen. */
-const blankVessel = () => ({ name: '', mmsi: '', imo: '', callSign: '', kind: 'ferry', length: 40, beam: null, draft: null, height: null, ais: null });
+const blankVessel = () => ({ name: '', mmsi: '', imo: '', callSign: '', kind: 'ferry', length: 40, beam: null, draft: null, height: null, ais: null, db: null });
 
 /**
  * Builds the builder into `root` (an empty element over the map). `onClose`: its close button;
@@ -95,6 +96,8 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
     save: { text: '', tone: '', link: '' },
     units: 'metric',
     callouts: true,
+    typed: new Set(), // the particulars typed in by hand: a lookup leaves them be
+    lookup: { state: '', imo: '' }, // her particulars from maritime-database.com: '', 'busy', 'ok', 'none', 'err'
   };
   let photoSeq = 0;
   let seq = 0; // each new vessel: work for an older one is dropped
@@ -189,6 +192,54 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
       st.error = `Her model (${e.name}) could not be loaded: ${err.message}`;
       render('status');
     }
+  }
+
+  /** Her model follows a new size or kind (a model of her own is sized to her length). */
+  function resized() {
+    if (st.view?.fit) showFile(st.view.object, { ...st.view.fit, length: num(st.vessel.length) ?? st.view.fit.length, draft: num(st.vessel.draft) ?? st.view.fit.draft }, st.view.source, st.view.entry, false);
+    else if (st.photos.some((p) => p.cut?.sil)) build();
+    else showFromType();
+  }
+
+  /**
+   * Her particulars by her IMO number, from maritime-database.com. They fill in what is not typed in
+   * by hand, nor known from her AIS report.
+   */
+  async function lookUp(imo) {
+    const my = seq;
+    if (!validImo(imo)) { st.lookup = { state: '', imo: '' }; render('particulars'); return; }
+    if (!proxyBase()) { st.lookup = { state: 'err', imo, text: 'To look her up on maritime-database.com from here, set a proxy in Settings → Vessel lookup.' }; render('particulars'); return; }
+    st.lookup = { state: 'busy', imo };
+    render('particulars');
+    let d;
+    try {
+      d = await lookupImo(imo);
+    } catch (err) {
+      if (my !== seq || st.vessel.imo !== imo) return;
+      st.lookup = { state: 'err', imo, text: `Not looked up on maritime-database.com: ${err.message}` };
+      render('particulars');
+      return;
+    }
+    if (my !== seq || st.vessel.imo !== imo) return; // another vessel, or another number, since
+    if (!d) { st.lookup = { state: 'none', imo, text: `maritime-database.com does not know IMO ${imo}.` }; render('particulars'); return; }
+    const v = st.vessel;
+    const ais = v.ais;
+    const src = ais ? hullFromAis(ais).sources : {};
+    const fromAis = { name: ais?.name, mmsi: ais?.mmsi, callSign: ais?.callSign, length: src.length === 'ais', beam: src.beam === 'ais', draft: ais && draughtM(ais) };
+    const set = (k, val) => { if (val !== null && val !== undefined && val !== '' && !st.typed.has(k) && !fromAis[k]) v[k] = val; };
+    const before = [v.kind, v.length, v.beam, v.draft].join();
+    set('name', d.name);
+    set('mmsi', d.mmsi);
+    set('callSign', d.callSign);
+    set('length', d.length);
+    set('beam', d.beam);
+    set('draft', d.draught);
+    set('kind', kindFromType(d.type, d.length ?? num(v.length) ?? 0));
+    v.db = d;
+    st.lookup = { state: 'ok', imo };
+    render('head', 'particulars', 'save');
+    if ([v.kind, v.length, v.beam, v.draft].join() !== before) resized();
+    if (!st.view || st.view.source === 'type') lookForModel(my); // her own model, now that more of her is known
   }
 
   // ---------- photos ----------
@@ -494,7 +545,7 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
     const v = st.vessel;
     const k = keys();
     const kind = KIND_PRESETS[v.kind]?.label ?? '';
-    const type = v.ais ? typeName(v.ais.shipType) : kind;
+    const type = v.db?.type || (v.ais ? typeName(v.ais.shipType) : kind);
     const ids = [k.imo.length === 7 ? `IMO ${k.imo}` : '', k.mmsi ? `MMSI ${k.mmsi}` : ''].filter(Boolean).join(' · ');
     $('.vb-id').innerHTML = `<h1>${esc(v.name || 'New vessel')}</h1><p>${esc([type, ids].filter(Boolean).join(', '))}</p>`;
   }
@@ -525,7 +576,10 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
     const v = st.vessel;
     const ais = v.ais;
     const field = (key, label, value, attrs = '') => `<tr><th><label for="vb-${key}">${label}</label></th><td><input id="vb-${key}" data-field="${key}" value="${esc(value ?? '')}" ${attrs}></td></tr>`;
-    const flag = flagOf(v.mmsi);
+    const db = v.db?.imo === String(v.imo) ? v.db : null;
+    const flag = db?.flag || flagOf(v.mmsi);
+    const lk = st.lookup.imo === v.imo ? st.lookup : { state: '' };
+    const ro = (label, value) => (value ? `<tr><th>${label}</th><td class="vb-ro">${esc(value)}</td></tr>` : '');
     sec('particulars').innerHTML = `
       <h2>Particulars</h2>
       <table class="vb-table vb-edit">
@@ -533,14 +587,22 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
         ${field('imo', 'IMO', v.imo, 'inputmode="numeric" autocomplete="off" placeholder="7 digits"')}
         ${field('mmsi', 'MMSI', v.mmsi, 'inputmode="numeric" autocomplete="off" placeholder="9 digits"')}
         ${field('callSign', 'Call sign', v.callSign, 'autocomplete="off" spellcheck="false"')}
-        ${flag ? `<tr><th>Flag</th><td class="vb-ro">${esc(flag)}</td></tr>` : ''}
-        ${ais ? `<tr><th>AIS type</th><td class="vb-ro">${esc(typeName(ais.shipType))}</td></tr>` : ''}
+        ${ro('Flag', flag)}
+        ${ro('Type', db?.type)}
+        ${ais ? ro('AIS type', typeName(ais.shipType)) : ''}
+        ${ro('Gross tonnage', db?.gross)}
+        ${ro('Deadweight (t)', db?.deadweight)}
+        ${ro('Built', db?.built)}
         <tr><th><label for="vb-kind">Kind</label></th><td><select id="vb-kind" data-field="kind">${KINDS.map(([k, l]) => `<option value="${k}" ${k === v.kind ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></td></tr>
         ${field('length', 'Length (m)', v.length, 'inputmode="decimal"')}
         ${field('beam', 'Beam (m)', v.beam, 'inputmode="decimal" placeholder="from the photos"')}
         ${field('draft', 'Draught (m)', v.draft, 'inputmode="decimal" placeholder="typical for her kind"')}
         ${field('height', 'Above water (m)', v.height, 'inputmode="decimal" placeholder="from the photos"')}
       </table>
+      ${lk.state === 'busy' ? `<p class="vb-msg">Looking up IMO ${esc(lk.imo)} on maritime-database.com…</p>` : ''}
+      ${lk.state === 'none' || lk.state === 'err' ? `<p class="vb-msg" data-tone="err">${esc(lk.text)}</p>` : ''}
+      ${lk.state === 'ok' && db ? `<p class="fine">Particulars by her IMO number from <a href="${esc(db.url || siteUrl(db.imo))}" target="_blank" rel="noopener">maritime-database.com</a>${v.ais ? ', where her AIS report does not give them' : ''}.</p>` : ''}
+      ${!lk.state && v.imo && !validImo(v.imo) ? '<p class="vb-msg" data-tone="err">That is not an IMO number: 7 digits, the last a check digit.</p>' : ''}
       ${ais?.msgtime ? '<p class="fine">From her AIS report; change anything that is wrong.</p>' : '<p class="fine">Her MMSI or IMO number is how she is known when she is met on a chart (Rudder matches by them).</p>'}`;
   }
 
@@ -648,9 +710,12 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
     st.desc = null;
     st.error = null;
     st.save = { text: '', tone: '', link: '' };
+    st.typed = new Set();
+    st.lookup = { state: '', imo: '' };
     showFromType();
     render();
     lookForModel(seq);
+    if (validImo(v.imo)) lookUp(v.imo);
   }
 
   root.addEventListener('click', async (e) => {
@@ -710,14 +775,13 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
     if (t.dataset.field) {
       const k = t.dataset.field;
       st.vessel[k] = k === 'kind' || k === 'name' || k === 'callSign' ? t.value : t.value.trim();
+      if (k === 'imo') st.vessel.imo = st.vessel.imo.replace(/\D/g, '');
+      else st.typed.add(k);
       render('head');
       // a new size or kind: her model follows (a model of her own is sized to her length)
-      if (['kind', 'length', 'beam', 'draft', 'height'].includes(k)) {
-        if (st.view?.fit) showFile(st.view.object, { ...st.view.fit, length: num(st.vessel.length) ?? st.view.fit.length, draft: num(st.vessel.draft) ?? st.view.fit.draft }, st.view.source, st.view.entry, false);
-        else if (st.photos.some((p) => p.cut?.sil)) build();
-        else showFromType();
-      }
+      if (['kind', 'length', 'beam', 'draft', 'height'].includes(k)) resized();
       if (['mmsi', 'imo', 'name', 'callSign'].includes(k)) render('particulars', 'save');
+      if (k === 'imo' && st.vessel.imo !== st.lookup.imo) lookUp(st.vessel.imo);
     }
   });
 

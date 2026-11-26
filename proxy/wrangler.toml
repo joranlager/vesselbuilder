@@ -1,0 +1,6 @@
+# The Cloudflare Worker that lets the page on GitHub Pages read maritime-database.com (maritime-worker.js).
+# Deploy: npx wrangler@4 deploy --config proxy/wrangler.toml
+name = "vesselbuilder-maritime"
+main = "maritime-worker.js"
+compatibility_date = "2026-11-01"
+workers_dev = true

@@ -25,6 +25,15 @@ page. Live at **https://joranlager.github.io/vesselbuilder/**.
   GitHub** (model, sidecar and `vessels/index.json` in one commit, with a token of your own in
   Settings: a fine-grained token with *Contents: read and write*); or save on this device.
 
+- **Looked up by IMO number.** Given her IMO number (typed in, or in the address), her name, MMSI,
+  call sign, flag, type, length, beam, gross tonnage, year built and draught are read from her page
+  on [maritime-database.com](https://maritime-database.com/). They fill in what is not typed in by
+  hand nor given by her AIS report. That site lets no other site's page read it, so it is asked
+  through a proxy: `npm start` is one (`/maritime/`); elsewhere the Cloudflare Worker
+  [proxy/maritime-worker.js](proxy/maritime-worker.js), at
+  `vesselbuilder-maritime.vesselbuilder.workers.dev` (deploy changes with
+  `npx wrangler@4 deploy --config proxy/wrangler.toml`). Another can be given in Settings → Vessel lookup.
+
 A vessel can be given in the address, so other apps can link to her:
 `?name=SANDOY&mmsi=257125930&imo=9894923&callsign=LGCX&length=43&beam=11&draught=3.2&type=69`
 (`type`: the AIS ship type number).
@@ -47,6 +56,7 @@ vessel with her model for everyone, commit it to Rudder's repository (set it in 
 | `public/ships/ship.js`, `hull.js`, `presets.js` | A ship built from her type |
 | `public/ships/vesselmodel.js` | Loading, fitting, texturing and exporting models |
 | `public/github.js` | Commits to GitHub (tested) |
+| `public/maritimedb.js` | A vessel by her IMO number from maritime-database.com (tested); `proxy/` its Cloudflare Worker |
 | `public/vesselcatalog.js`, `vessellibrary.js` | The vessels folder's index; models on the device |
 
 Plain ES modules, no framework. three.js 0.180 is vendored in `public/vendor/` by `npm run vendor`
