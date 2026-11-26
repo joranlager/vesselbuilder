@@ -42,7 +42,7 @@ export class HullShape {
   deckH(xn) {
     const fwd = Math.max(0, (xn - 0.45) / 0.55);
     const aft = Math.max(0, (0.4 - xn) / 0.4);
-    return this.D + this.p.sheer * this.D * (fwd * fwd + 0.35 * aft * aft);
+    return this.D + this.p.sheer * this.D * (fwd * fwd + (this.p.stern === 'double' ? 1 : 0.35) * aft * aft);
   }
   get maxDeckH() {
     return Math.max(this.deckH(1), this.deckH(0));
@@ -50,6 +50,7 @@ export class HullShape {
   /** Height of the keel line above baseline: rises at the stern (cut-up) for propeller and rudder. */
   keelH(xn) {
     const T = this.T;
+    if (this.p.stern === 'double') return 0; // a bow at both ends: no cut-up for a propeller aft
     if (this.p.stern === 'transom') {
       const s = Math.max(0, (0.1 - xn) / 0.1);
       return T * 0.82 * Math.pow(s, 1.6);
@@ -80,6 +81,7 @@ export class HullShape {
   sternX(h) {
     const L2 = this.L / 2;
     const top = this.deckH(0);
+    if (this.p.stern === 'double') return -this.bowX(h); // the bow's profile, mirrored
     if (this.p.stern === 'transom') {
       // slight rake of the transom plate
       return -L2 + 0.12 * (top - h) * 0.3;
@@ -103,6 +105,11 @@ export class HullShape {
       let e = this.eBow * (1 + this.p.flare * 1.6 * above) * (0.8 + 0.2 * below);
       if (this.p.bow === 'clipper') e *= 0.85;
       return 1 - Math.pow(1 - t, Math.max(1.05, e));
+    }
+    if (xn < this.fr && this.p.stern === 'double') {
+      // a double-ender: her stern is drawn as fine as her bow
+      const t = xn / this.fr;
+      return 1 - Math.pow(1 - t, Math.max(1.05, this.eBow * (1 + this.p.flare * 1.6 * above) * (0.8 + 0.2 * below)));
     }
     if (xn < this.fr) {
       const s = xn / this.fr;

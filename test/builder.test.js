@@ -42,7 +42,7 @@ test('a photo\'s description: views, numbers, colours and the name', () => {
   const d = parseDescription('{"view":"side","bow":"left","type":"Car ferry","name":"Sandøy","hull":"dark blue","superstructure":"white","funnel":"yellow","decks":"3 decks","funnels":1,"masts":99,"bowShape":"raked","stern":"ramp","bridge":"forward"}');
   assert.deepEqual(d, {
     view: 'side', bow: 'left', type: 'ferry', name: 'SANDØY', hull: '#16305a', superstructure: '#f2f2ef', funnel: '#e7b416',
-    decks: 3, funnels: 1, masts: null, bowShape: 'raked', stern: 'ramp', bridge: 'forward',
+    decks: 3, funnels: 1, masts: null, bowShape: 'raked', stern: 'ramp', bridge: 'forward', doubleEnded: null,
   });
   assert.equal(parseDescription('{"name": "unknown"}').name, '');
   assert.equal(parseDescription('I cannot see a ship.'), null);

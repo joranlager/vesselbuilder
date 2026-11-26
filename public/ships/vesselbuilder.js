@@ -1,5 +1,5 @@
 // A vessel built from her photos and what the AI read in them (vision.js). First, from a side photo,
-// the low-poly blocks the AI saw in it (lowpoly.js, buildLowPoly); then, refined: the side photos' outlines
+// a detailed model of the blocks the AI saw in it (blockmodel.js, buildFromBlocks); then, refined: the side photos' outlines
 // carve her shape above the water (photomodel.js), with views from above and from the ends drawn from
 // her description where there are no photos of those (synthviews.js); each part is painted from the
 // photo facing it, or in her colours where no photo shows it; a hull under the water is added to her
@@ -15,7 +15,7 @@ import { bandColours, hullTopFromSide, kindFor, BOW_FOR, STERN_FOR, SUPERSTRUCTU
 import { buildShip } from './ship.js';
 import { DEFAULT_LIVERY, KIND_PRESETS, defaultParams, depthFor } from './presets.js';
 import { fitModel, loadModel } from './vesselmodel.js';
-import { shipPlan, lowPolyObj } from './lowpoly.js';
+import { shipPlan, blockModelObj } from './blockmodel.js';
 import { HULL_FONTS } from './hullText.js';
 
 const MAX_SIDE = 640; // pictures are cut out at this size; textures keep up to 2048 px
@@ -230,7 +230,7 @@ export function buildVessel({ photos, desc = null, dims, fallbackKind = 'cargo',
   }
   const colours = coloursFor(kind, desc, sampled);
   const T = dims.draft > 0 ? dims.draft : B / preset.bt;
-  const shape = { kind, stern: STERN_FOR[desc?.stern] ?? preset.stern };
+  const shape = { kind, stern: desc?.doubleEnded ? 'double' : STERN_FOR[desc?.stern] ?? preset.stern };
 
   if (!sides.length || prefer === 'type') {
     if (!sides.length && photos.length) notes.push('No photo shows her side, so she is built from her type in the colours and shape the photos show. A photo from abeam makes her own shape.');
@@ -287,7 +287,7 @@ function fromType(kind, { L, B, T, height }, desc, colours) {
     draft: T,
     depth: Math.max(p.depth * (B / p.beam), depthFor(kind, B, T, L)),
     bow: BOW_FOR[desc?.bowShape] ?? p.bow,
-    stern: STERN_FOR[desc?.stern] ?? p.stern,
+    stern: desc?.doubleEnded ? 'double' : STERN_FOR[desc?.stern] ?? p.stern,
     decks: desc?.decks > 0 ? Math.min(12, desc.decks) : p.decks,
     funnels: desc?.funnels >= 0 && desc?.funnels !== null ? Math.min(4, desc.funnels) : p.funnels,
     masts: desc?.masts >= 0 && desc?.masts !== null ? Math.min(5, desc.masts) : p.masts,
@@ -300,12 +300,12 @@ function fromType(kind, { L, B, T, height }, desc, colours) {
 }
 
 /**
- * Her first model: the low-poly OBJ of the blocks the vision model saw in a photo of her side
- * (lowpoly.js), loaded as any OBJ is. `photo` { sil, data, slot, flip } (slot 'port': bow to the
- * left, 'starboard': to the right), `plan` the read answer (parseLowPoly). Resolves to { model,
- * method: 'lowpoly', kind, size, colours, obj, mtl, notes }.
+ * Her first model: the detailed OBJ of the blocks the vision model saw in a photo of her side
+ * (blockmodel.js), loaded as any OBJ is. `photo` { sil, data, slot, flip } (slot 'port': bow to the
+ * left, 'starboard': to the right), `plan` the read answer (parseBlocks). Resolves to { model,
+ * method: 'blocks', kind, size, colours, obj, mtl, notes }.
  */
-export async function buildLowPoly({ photo, plan, desc = null, dims, fallbackKind = 'cargo' }) {
+export async function buildFromBlocks({ photo, plan, desc = null, dims, fallbackKind = 'cargo' }) {
   const L = dims.length > 0 ? dims.length : KIND_PRESETS[kindFor(desc?.type, 0, fallbackKind)]?.length ?? 60;
   const kind = kindFor(desc?.type, L, fallbackKind);
   const preset = KIND_PRESETS[kind] ?? KIND_PRESETS.cargo;
@@ -316,11 +316,11 @@ export async function buildLowPoly({ photo, plan, desc = null, dims, fallbackKin
   const sampled = photo?.sil && photo.data ? bandColours(photo.data, photo.sil, hullTop) : {};
   const colours = coloursFor(kind, desc, sampled);
   const bow = photo?.slot === 'port' ? 'left' : photo?.slot === 'starboard' ? 'right' : plan.bow ?? 'right';
-  const along = shipPlan(plan, bow, hullTop);
-  const { obj, mtl } = lowPolyObj(along, { L, B, H, T }, colours, { superstructureWidth: SUPERSTRUCTURE_WIDTH[kind] ?? 0.85 });
-  const object = await loadModel({ files: [new File([obj], 'lowpoly.obj', { type: 'text/plain' }), new File([mtl], 'lowpoly.mtl', { type: 'text/plain' })] });
-  object.name = 'vessel_low_poly';
+  const along = shipPlan(plan, bow, hullTop, Boolean(desc?.doubleEnded));
+  const r = blockModelObj(along, { L, B, H, T }, colours, { superstructureWidth: SUPERSTRUCTURE_WIDTH[kind] ?? 0.85 });
+  const object = await loadModel({ files: [new File([r.obj], 'vessel.obj', { type: 'text/plain' }), new File([r.mtl], 'vessel.mtl', { type: 'text/plain' })] });
+  object.name = 'vessel_from_blocks';
   const model = fitModel(object, { up: '+y', forward: '+x', scale: 1, waterline: 'origin' });
-  const notes = [`Her first model: ${along.blocks.length} block${along.blocks.length === 1 ? '' : 's'} on her hull, as the vision model saw them in the side photo.`];
-  return { model, method: 'lowpoly', kind, size: { L, B, H, T }, colours, obj, mtl, notes };
+  const notes = [`Her first model: ${along.doubleEnded ? 'a double-ended hull' : 'her hull'} with ${along.blocks.length} block${along.blocks.length === 1 ? '' : 's'} on it, as the vision model saw them in the side photo (${r.faces} faces).`];
+  return { model, method: 'blocks', kind, size: { L, B, H, T }, colours, obj: r.obj, mtl: r.mtl, notes };
 }

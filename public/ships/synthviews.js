@@ -18,6 +18,7 @@ export function planShape(a, { kind = 'cargo', stern = 'transom' } = {}) {
   const s = 0.12;
   let f = 1;
   if (a > 1 - e) f = 1 - ((a - (1 - e)) / e) ** 1.8;
+  else if (stern === 'double' && a < e) f = 1 - ((e - a) / e) ** 1.8; // a bow at both ends
   else if (a < s) f = stern === 'cruiser' ? 0.15 + 0.85 * Math.sqrt(a / s) : 0.78 + 0.22 * Math.sqrt(a / s);
   return Math.max(0.02, Math.min(1, f));
 }

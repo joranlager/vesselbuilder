@@ -14,7 +14,8 @@ export const PROMPT = `Look at this photo of a ship. Reply with one JSON object 
  "decks": number of decks above the hull, "funnels": number, "masts": number,
  "bowShape": "raked" | "vertical" | "bulbous" | "clipper" | "ramp",
  "stern": "transom" | "rounded" | "ramp",
- "bridge": "forward" | "middle" | "aft"}
+ "bridge": "forward" | "middle" | "aft",
+ "doubleEnded": true if both ends of the ship are shaped like a bow (a double-ended ferry), else false}
 "view" is where the camera is: "side" when the whole side of the ship is seen, "bow" when looking at the front, "stern" when looking at the back. "bow" says which way the front of the ship points in the photo.`;
 
 /**
@@ -206,14 +207,24 @@ export function parseDescription(text) {
     bowShape: enumValue('bowShape', get('bowShape', 'bow_shape', 'bowshape')),
     stern: enumValue('stern', get('stern', 'sternShape', 'stern_shape')),
     bridge: enumValue('bridge', get('bridge', 'bridgePosition', 'bridge_position')),
+    doubleEnded: yesNo(get('doubleEnded', 'double_ended', 'doubleended')),
   };
+}
+
+/** true, false or null (not said) from what the model wrote: true, "yes", "double-ended"… */
+function yesNo(v) {
+  if (v === true || v === false) return v;
+  const s = String(v ?? '').toLowerCase().trim();
+  if (/^(true|yes|both|double)/.test(s)) return true;
+  if (/^(false|no|one|single)/.test(s)) return false;
+  return null;
 }
 
 // ---------- several photos: one vessel ----------
 
 function vote(values) {
   const n = new Map();
-  for (const v of values) if (v !== null && v !== undefined && v !== '' && v !== 'other' && v !== 'unknown') n.set(v, (n.get(v) ?? 0) + 1);
+  for (const v of values) if (v !== null && v !== undefined && v !== '' && v !== 'other' && v !== 'unknown') n.set(v, (n.get(v) ?? 0) + 1); // false counts too
   let best = null, bn = 0;
   for (const [v, c] of n) if (c > bn) { best = v; bn = c; }
   return best;
@@ -248,6 +259,7 @@ export function mergeDescriptions(list) {
     bowShape: pick('bowShape'),
     stern: pick('stern'),
     bridge: pick('bridge'),
+    doubleEnded: pick('doubleEnded'),
     photos: ds.length,
   };
 }

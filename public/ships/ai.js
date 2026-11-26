@@ -4,7 +4,7 @@
 
 /**
  * The vision models to choose from, all Qwen3.5 (the same code runs them): the larger see more and
- * answer better (her blocks, lowpoly.js; her bow), but take longer to download and need a graphics
+ * answer better (her blocks, blockmodel.js; her bow), but take longer to download and need a graphics
  * card with the memory for them. `size`: the download in MB as the worker loads them.
  */
 export const VISION_MODELS = [

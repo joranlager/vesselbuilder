@@ -15,11 +15,15 @@ page. Live at **https://joranlager.github.io/vesselbuilder/**.
   answers turn round with it), her type, the name on her hull, her colours, decks, funnels, bow and
   stern. Both run in the browser with transformers.js, on the GPU (WebGPU) or the processor; they are
   downloaded once and kept by the browser, and the photos never leave the device.
-- **Her first model: low-poly blocks.** For a photo of her side, the vision model is also asked for
-  her structure as a few blocks on a 0–10 grid: how high her hull stands, how raked her bow and stern
-  are, and her superstructure, bridge, funnels, masts and cranes. That plan is made into a low-poly
-  `.obj` (with its `.mtl`) and shown as her model at once, before anything is carved; it can be kept
-  (Shape: low-poly blocks) and downloaded (**Low-poly .obj**).
+- **Her first model, from the AI's blocks.** For a photo of her side, the vision model is also
+  asked for her structure on a 0–10 grid: how high her hull stands, how raked her bow and stern are,
+  whether she has a bow at both ends (a double-ended ferry), and her superstructure, bridge, funnels,
+  masts and cranes. That plan is made into a detailed `.obj` (with its `.mtl`, some 4000 faces): a
+  smooth hull lofted through many sections, with sheer, flare and a rounded bilge, fine at the bow
+  (and at the stern too when she is double-ended); superstructure tiers with rounded corners that
+  follow the hull's narrowing, with a band of windows; oval funnels and round masts. It is shown as
+  her model at once, before anything is carved; it can be kept (Shape: from the AI's blocks) and
+  downloaded (**Blocks model .obj**). Double-ended vessels are built so from her type, too.
 - **Her model.** With a photo of her side, her shape above the water is carved from the outlines,
   the views no photo shows are drawn from her kind, each part is painted from the photo facing it
   (else in her colours), and a hull is added under the water. Without one, she is built from her
@@ -58,7 +62,7 @@ vessel with her model for everyone, commit it to Rudder's repository (set it in 
 | `public/ships/ai.js`, `aiworker.js` | The AI models, in a worker |
 | `public/ships/vision.js` | The question, reading the answers, merging photos (tested) |
 | `public/ships/vesselbuilder.js` | Her model from photos and description |
-| `public/ships/lowpoly.js` | The AI's blocks for her shape, read and made into a low-poly OBJ (tested) |
+| `public/ships/blockmodel.js` | The AI's blocks for her shape, read and made into a detailed OBJ (tested) |
 | `public/ships/photomodel.js`, `synthviews.js` | Carving from outlines; the views no photo shows (tested) |
 | `public/ships/ship.js`, `hull.js`, `presets.js` | A ship built from her type |
 | `public/ships/vesselmodel.js` | Loading, fitting, texturing and exporting models |
