@@ -1,0 +1,21 @@
+{
+  "name": "vesselbuilder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Build a vessel's 3D model from her photos, with AI on your own device",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/*.test.js",
+    "vendor": "node scripts/vendor.mjs",
+    "vessels": "node scripts/vessels.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10",
+    "three": "0.180.0"
+  }
+}

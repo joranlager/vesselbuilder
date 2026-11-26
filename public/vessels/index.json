@@ -1,0 +1,4 @@
+{
+  "about": "Vessel models Rudder uses before building a ship from its type. Made by `npm run vessels` from the files and their .json sidecars; see README.md here.",
+  "vessels": []
+}

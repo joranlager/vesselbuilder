@@ -1,0 +1,54 @@
+:root {
+  --bg: #f4f7fa;
+  --panel: rgba(255, 255, 255, 0.96);
+  --ink: #0d1b26;
+  --muted: #5a6b78;
+  --line: #d6dfe6;
+  --accent: #0a6fb8;
+  --brand: #0b2236;
+  --shadow: 0 6px 24px rgba(8, 26, 40, 0.18);
+  --radius: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #071521;
+    --panel: rgba(12, 29, 43, 0.96);
+    --ink: #e6eef4;
+    --muted: #93a7b6;
+    --line: #23394b;
+    --accent: #5cb4f2;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+  font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+button { font: inherit; color: inherit; }
+
+.topbar { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: 10px; align-items: center;
+  padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; z-index: 4; pointer-events: none; }
+.topbar > * { pointer-events: auto; }
+.brand { display: flex; align-items: center; gap: 8px; background: var(--brand); color: #fff; font-weight: 650;
+  letter-spacing: .02em; padding: 7px 14px 7px 8px; border-radius: 999px; box-shadow: var(--shadow); }
+.build { font-size: 11px; color: var(--muted); }
+.icon-btn { margin-left: auto; width: 42px; height: 42px; border-radius: 50%; border: 0; background: var(--panel);
+  box-shadow: var(--shadow); display: grid; place-items: center; cursor: pointer; }
+.loading { padding: 80px 20px; text-align: center; color: var(--muted); }
+
+#settings { width: min(460px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); color: var(--ink); box-shadow: var(--shadow); padding: 16px 18px 18px; }
+#settings::backdrop { background: rgba(7, 21, 33, 0.45); }
+.settings-head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 6px; }
+.settings-head h2 { margin: 0; font-size: 18px; }
+.settings-head .close { border: 0; background: none; font-size: 24px; line-height: 1; cursor: pointer; color: var(--muted); }
+#settings h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 12px 0 6px; }
+#settings .fine { font-size: 13px; color: var(--muted); margin: 6px 0; }
+#settings label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+#settings input { min-height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+#settings .buttons { display: flex; gap: 8px; margin-top: 14px; }
+#settings .buttons button { min-height: 38px; padding: 0 14px; border-radius: 8px; border: 0; cursor: pointer; background: var(--accent); color: #fff; font-weight: 600; }
+#settings .buttons button.quiet { background: transparent; color: #c0392b; }
+#settings .state { font-size: 14px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--ink) 7%, transparent); }
+#settings .state[data-tone="ok"] { background: color-mix(in srgb, #1f9d55 14%, transparent); }
+#settings .state[data-tone="err"] { background: color-mix(in srgb, #c0392b 14%, transparent); }
