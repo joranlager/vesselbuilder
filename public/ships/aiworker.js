@@ -3,9 +3,10 @@
 // Face and kept in the browser's cache:
 //   - cutting the vessel out of a photo: ormbg (Apache 2.0; an ISNet trained to remove backgrounds),
 //     88 MB on the GPU, 44 MB on the processor;
-//   - describing a photo: Qwen3.5 0.8B (Apache 2.0), a vision-language model, about 850 MB.
+//   - describing a photo: Qwen3.5 (Apache 2.0), a vision-language model: 0.8B (about 850 MB), 2B
+//     (2.2 GB) or 4B (3.8 GB), as chosen (ai.js's VISION_MODELS); one at a time is kept loaded.
 // After a failure on the GPU the cut-out runs on the processor, in a fresh worker (ai.js, ?cpu).
-// Messages in: { id, task: 'cutout', blob } and { id, task: 'describe', blob, prompt, maxTokens }.
+// Messages in: { id, task: 'cutout', blob } and { id, task: 'describe', blob, prompt, maxTokens, model }.
 // Out: { id, progress: { model, file, loaded, total } } while downloading, { id, token } while
 // writing, then { id, result } or { id, error }.
 
@@ -66,13 +67,21 @@ async function cutout(id, blob) {
 }
 
 let describer = null;
-async function loadDescriber(id) {
+let describerRepo = '';
+async function loadDescriber(id, repo = DESCRIBE_MODEL) {
   const { AutoProcessor, Qwen3_5ForConditionalGeneration } = await lib();
   const d = await device();
+  if (describer && describerRepo !== repo) {
+    // another model chosen: the one loaded gives its memory back first (the larger need all of it)
+    const old = describer;
+    describer = null;
+    try { (await old).model.dispose?.(); } catch { /* it never loaded */ }
+  }
+  describerRepo = repo;
   describer ??= (async () => {
     const progress_callback = progressFor(id, 'describe');
-    const processor = await AutoProcessor.from_pretrained(DESCRIBE_MODEL, { progress_callback });
-    const model = await Qwen3_5ForConditionalGeneration.from_pretrained(DESCRIBE_MODEL, {
+    const processor = await AutoProcessor.from_pretrained(repo, { progress_callback });
+    const model = await Qwen3_5ForConditionalGeneration.from_pretrained(repo, {
       dtype: {
         embed_tokens: 'q4',
         vision_encoder: d.webgpu && d.f16 ? 'fp16' : 'q4',
@@ -86,9 +95,10 @@ async function loadDescriber(id) {
   return describer;
 }
 
-async function describe(id, blob, prompt, maxTokens = 220) {
+async function describe(id, blob, prompt, maxTokens = 220, repo = DESCRIBE_MODEL) {
+  if (!repo.startsWith('onnx-community/Qwen3.5-')) throw new Error(`Not a vision model this page runs: ${repo}`);
   const { RawImage, TextStreamer } = await lib();
-  const { processor, model } = await loadDescriber(id);
+  const { processor, model } = await loadDescriber(id, repo);
   let image = await RawImage.fromBlob(blob);
   // about 640 px across: enough to read a name on the hull, few enough image tokens to be quick
   const k = Math.min(1, 640 / Math.max(image.width, image.height));
@@ -111,7 +121,7 @@ self.onmessage = async (e) => {
   try {
     let result;
     if (task === 'cutout') result = await cutout(id, e.data.blob);
-    else if (task === 'describe') result = await describe(id, e.data.blob, e.data.prompt, e.data.maxTokens);
+    else if (task === 'describe') result = await describe(id, e.data.blob, e.data.prompt, e.data.maxTokens, e.data.model);
     else if (task === 'device') result = await device();
     else throw new Error(`Unknown task ${task}`);
     self.postMessage({ id, result }, result?.alpha ? [result.alpha.buffer] : []);

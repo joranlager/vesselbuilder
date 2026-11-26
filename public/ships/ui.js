@@ -20,7 +20,7 @@ import { PROMPT, BOW_PROMPTS, bowVote, parseDescription, mergeDescriptions, slot
 import { aspect } from './photomodel.js';
 import { readPicture, cutPhoto, buildVessel, buildLowPoly } from './vesselbuilder.js';
 import { LOWPOLY_PROMPT, parseLowPoly } from './lowpoly.js';
-import { aiCutout, aiDescribe, aiDevice, MODEL_SIZES } from './ai.js';
+import { aiCutout, aiDescribe, aiDevice, MODEL_SIZES, VISION_MODELS, visionModel, setVisionModel } from './ai.js';
 import { loadGithub, commitVessel, vesselFileBase, branchFromBuild } from '../github.js';
 import { lookupImo, validImo, proxyBase, siteUrl, kindFromType } from '../maritimedb.js';
 import * as THREE from '../vendor/three.js';
@@ -29,6 +29,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const num = (v) => (Number(v) > 0 ? Number(v) : null);
 const fmtM = (m) => (m > 0 ? `${m < 20 ? m.toFixed(1) : Math.round(m)} m` : '—');
 const mb = (b) => `${Math.round(b / 1e6)} MB`;
+const size = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} GB` : `${m} MB`); // MB as read
 
 const VIEWS = [['quarter', '3/4'], ['profile', 'Side'], ['bow', 'Bow'], ['stern', 'Stern'], ['top', 'Above']];
 const KINDS = Object.entries(KIND_PRESETS).map(([k, p]) => [k, p.label]);
@@ -99,6 +100,7 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
     save: { text: '', tone: '', link: '' },
     units: 'metric',
     callouts: true,
+    aiOpen: false, // the AI's settings shown
     typed: new Set(), // the particulars typed in by hand: a lookup leaves them be
     lookup: { state: '', imo: '' }, // her particulars from maritime-database.com: '', 'busy', 'ok', 'none', 'err'
   };
@@ -337,7 +339,7 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
           render('photos');
           try {
             const r = await aiDescribe(p.img, PROMPT, {
-              onProgress: onProgress(`the vision model, Qwen3.5 (${MODEL_SIZES.describe} MB)`),
+              onProgress: onProgress(`the vision model, ${visionModel().label} (${size(MODEL_SIZES.describe)})`),
               onToken: (t) => { p.raw += t; if (st.busy) { st.busy.text = `Looking at photo ${n}: ${p.raw.slice(-80)}`; render('busy'); } },
             });
             p.raw = r.text;
@@ -695,10 +697,12 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
         ${st.lowpoly ? '<button type="button" data-act="download-obj">Low-poly .obj</button>' : ''}
         <button type="button" data-act="clear-photos" ${st.busy ? 'disabled' : ''}>Clear</button>
       </div>` : ''}
-      <details class="vb-ai">
+      <details class="vb-ai" ${st.aiOpen ? 'open' : ''}>
         <summary>AI on this device</summary>
         <label class="vb-check"><input type="checkbox" data-ai="cutout" ${st.useAi.cutout ? 'checked' : ''}> Remove backgrounds (ormbg, ${MODEL_SIZES.cutout} MB)</label>
-        <label class="vb-check"><input type="checkbox" data-ai="describe" ${st.useAi.describe ? 'checked' : ''}> Describe the photos: view, type, name, colours, decks, funnels, bow and stern (Qwen3.5, ${MODEL_SIZES.describe} MB)</label>
+        <label class="vb-check"><input type="checkbox" data-ai="describe" ${st.useAi.describe ? 'checked' : ''}> Describe the photos: view, type, name, colours, decks, funnels, bow and stern, and her shape as blocks</label>
+        <label class="vb-ai-model">Vision model<select data-act="vision-model" ${st.busy ? 'disabled' : ''}>${VISION_MODELS.map((m) => `<option value="${m.id}" ${m.id === visionModel().id ? 'selected' : ''}>${esc(m.label)}, ${size(m.size)}: ${esc(m.note)}</option>`).join('')}</select></label>
+        ${visionModel().id !== '0.8b' && st.gpu && !st.gpu.webgpu ? '<p class="vb-msg" data-tone="err">This browser has no WebGPU: a model this large is very slow on the processor. Choose Qwen3.5 0.8B here.</p>' : ''}
         <p class="fine">Downloaded once from Hugging Face and kept by the browser. Your photos never leave this device. ${gpu}</p>
       </details>`;
     renderBusy();
@@ -795,6 +799,9 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
     else if (a === 'place') place();
   });
 
+  // the AI's settings stay open while the photos' card is drawn again
+  root.addEventListener('toggle', (e) => { if (e.target.classList?.contains('vb-ai')) st.aiOpen = e.target.open; }, true);
+
   root.addEventListener('change', (e) => {
     const t = e.target;
     if (t.dataset.pick === 'photos') { addPhotos(t.files); t.value = ''; return; }
@@ -812,6 +819,11 @@ export function createShipInspector(root, { onClose, onPlace } = {}) {
     }
     if (t.dataset.ai) { st.useAi[t.dataset.ai] = t.checked; return; }
     if (t.dataset.act === 'prefer') { st.prefer = t.value; build(); return; }
+    if (t.dataset.act === 'vision-model') {
+      try { setVisionModel(t.value); } catch { /* not stored: this page only */ }
+      render('photos');
+      return;
+    }
     if (t.dataset.act === 'tex-target') { st.texTarget = t.value; return; }
     if (t.dataset.fit && st.view?.fit) {
       const fit = { ...st.view.fit, [t.dataset.fit]: t.value };

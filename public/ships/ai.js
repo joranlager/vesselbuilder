@@ -2,8 +2,34 @@
 // needed, asked to cut a vessel out of a photo or to describe it. Pictures go to it as JPEG blobs no
 // bigger than they need to be. Nothing leaves the device but the downloads of the models themselves.
 
+/**
+ * The vision models to choose from, all Qwen3.5 (the same code runs them): the larger see more and
+ * answer better (her blocks, lowpoly.js; her bow), but take longer to download and need a graphics
+ * card with the memory for them. `size`: the download in MB as the worker loads them.
+ */
+export const VISION_MODELS = [
+  { id: '0.8b', repo: 'onnx-community/Qwen3.5-0.8B-ONNX-OPT', label: 'Qwen3.5 0.8B', size: 850, note: 'quick, runs on most devices' },
+  { id: '2b', repo: 'onnx-community/Qwen3.5-2B-ONNX-OPT', label: 'Qwen3.5 2B', size: 2200, note: 'better; a graphics card with 4 GB or more' },
+  { id: '4b', repo: 'onnx-community/Qwen3.5-4B-ONNX-OPT', label: 'Qwen3.5 4B', size: 3800, note: 'best; a graphics card with 8 GB or more' },
+];
+export const VISION_KEY = 'vesselbuilder.vision.v1';
+
+/** The vision model chosen on this device (the smallest until one is chosen). */
+export function visionModel(storage = globalThis.localStorage) {
+  let id = '';
+  try { id = String(JSON.parse(storage?.getItem(VISION_KEY) ?? 'null')?.model ?? ''); } catch { /* the default */ }
+  return VISION_MODELS.find((m) => m.id === id) ?? VISION_MODELS[0];
+}
+export function setVisionModel(id, storage = globalThis.localStorage) {
+  if (!VISION_MODELS.some((m) => m.id === id)) throw new Error(`No vision model ${id}`);
+  storage.setItem(VISION_KEY, JSON.stringify({ model: id }));
+}
+
 /** What the models cost to download, once (the browser keeps them). */
-export const MODEL_SIZES = { cutout: 88, describe: 850 }; // MB
+export const MODEL_SIZES = {
+  cutout: 88,
+  get describe() { return visionModel().size; },
+}; // MB
 
 let worker = null;
 let cpu = false; // the cut-out failed on this GPU: a fresh worker that keeps it on the processor
@@ -73,7 +99,7 @@ export async function aiCutout(img, opts = {}) {
 
 /** The model's answer to `prompt` about `img`: { text, device }. `onToken` gets it as it is written. */
 export async function aiDescribe(img, prompt, opts = {}) {
-  return ask({ task: 'describe', blob: await jpegOf(img, 896), prompt, maxTokens: opts.maxTokens ?? 220 }, opts);
+  return ask({ task: 'describe', blob: await jpegOf(img, 896), prompt, maxTokens: opts.maxTokens ?? 220, model: visionModel().repo }, opts);
 }
 
 /** Whether this browser can run the models on its GPU (much quicker): { webgpu, f16 }. */

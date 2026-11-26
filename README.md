@@ -9,7 +9,8 @@ page. Live at **https://joranlager.github.io/vesselbuilder/**.
 ## What it does
 
 - **Photos in.** Drop photos of a vessel. Each is cut out of its background (ormbg, 88 MB) and
-  described by a small vision-language model (Qwen3.5 0.8B, about 850 MB): which view it is, which
+  described by a vision-language model (Qwen3.5: 0.8B, about 850 MB; or, chosen under AI on this
+  device, 2B at 2.2 GB or 4B at 3.8 GB, which see better on a graphics card that holds them): which view it is, which
   way her bow points (asked again on its own, of the photo and its mirror, and counted only when the
   answers turn round with it), her type, the name on her hull, her colours, decks, funnels, bow and
   stern. Both run in the browser with transformers.js, on the GPU (WebGPU) or the processor; they are

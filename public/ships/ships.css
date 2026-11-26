@@ -145,6 +145,8 @@
 .vb-check input { margin-top: 2px; }
 .vb-ai { margin-top: 12px; font-size: 14px; }
 .vb-ai summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.vb-ai-model { display: grid; gap: 4px; margin-top: 8px; font-size: 12.5px; color: var(--label-2); }
+.vb-ai-model select { width: 100%; }
 .vb-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .vb-actions button { background: var(--tint-bg); }
 .vb-actions button.primary { grid-column: 1 / -1; background: var(--blue); }
