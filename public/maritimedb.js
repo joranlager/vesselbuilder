@@ -2,13 +2,15 @@
 // flag, type, length and beam, gross tonnage, year built and latest draught.
 //
 // The site does not let pages on other sites read it (CORS), so it is asked through a proxy: the
-// local server's own (scripts/serve.mjs, at /maritime/) or one set in Settings, such as the
-// Cloudflare Worker in proxy/maritime-worker.js. A proxy is given `vessel/imo:<7 digits>` after its
+// one set in Settings, else the local server's own (scripts/serve.mjs, at /maritime/), else the
+// Cloudflare Worker in proxy/maritime-worker.js (PROXY). A proxy is given `vessel/imo:<7 digits>` after its
 // address and answers with the vessel's page. Reading the page is pure, so it is tested.
 
 export const MARITIME_KEY = 'vesselbuilder.maritime.v1';
 export const SITE = 'https://maritime-database.com';
 const LOCAL = '/maritime/';
+/** The Cloudflare Worker (proxy/maritime-worker.js), deployed with proxy/wrangler.toml. */
+export const PROXY = 'https://vesselbuilder-maritime.vesselbuilder.workers.dev/';
 
 /** Is this a valid IMO number (7 digits, the last a check digit)? */
 export function validImo(imo) {
@@ -36,11 +38,11 @@ export function saveProxy(proxy, storage = globalThis.localStorage) {
 /** Is the page served by the local server (npm start), which has a proxy of its own? */
 export const isLocal = (loc = globalThis.location) => /^(localhost|127\.0\.0\.1|\[::1\])$/.test(String(loc?.hostname ?? ''));
 
-/** The proxy to ask through: the one set in Settings, else the local server's, else none (''). */
+/** The proxy to ask through: the one set in Settings, else the local server's, else the worker. */
 export function proxyBase(proxy = loadProxy(), loc = globalThis.location) {
   const p = String(proxy ?? '').trim();
   if (p) return p.endsWith('/') ? p : `${p}/`;
-  return isLocal(loc) ? LOCAL : '';
+  return isLocal(loc) ? LOCAL : PROXY;
 }
 
 /** The address to ask for a vessel by her IMO number, through a proxy. */

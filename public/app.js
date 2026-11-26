@@ -5,7 +5,7 @@
 import { createShipInspector } from './ships/ui.js';
 import { vesselFromParams } from './vesselparams.js';
 import { loadGithub, saveGithub, clearGithub, repoFromLocation, branchFromBuild, validRepo } from './github.js';
-import { loadProxy, saveProxy, isLocal } from './maritimedb.js';
+import { loadProxy, saveProxy, isLocal, PROXY } from './maritimedb.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -39,10 +39,10 @@ function renderSettings() {
     <p class="fine">Kept only on this device and sent only to api.github.com.</p>
     <h3>Vessel lookup</h3>
     <p class="fine">Given her IMO number, her name, numbers, type and size are looked up on maritime-database.com.
-      That site lets no other site's page read it, so it is asked through a proxy: ${isLocal() ? 'the local server is one already, or give another here' : 'give its address here (such as the Cloudflare Worker in the repository’s <code>proxy/</code> folder)'}.</p>
+      That site lets no other site's page read it, so it is asked through a proxy: ${isLocal() ? 'the local server' : `the vessel builder’s own, <code>${esc(new URL(PROXY).host)}</code>`}, unless you give another here.</p>
     ${lookMsg.text ? `<p class="state" data-tone="${lookMsg.tone}">${esc(lookMsg.text)}</p>` : ''}
     <form id="lookup-form" autocomplete="off">
-      <label>Proxy<input name="proxy" type="url" value="${esc(loadProxy())}" placeholder="${isLocal() ? 'the local server' : 'https://…workers.dev/'}" spellcheck="false" autocapitalize="off"></label>
+      <label>Proxy<input name="proxy" type="url" value="${esc(loadProxy())}" placeholder="${isLocal() ? 'the local server' : esc(PROXY)}" spellcheck="false" autocapitalize="off"></label>
       <div class="buttons"><button type="submit">Save on this device</button></div>
     </form>
     <p class="fine">Only the IMO numbers you give are sent to it.</p>`;
@@ -63,7 +63,7 @@ $('#settings-body').addEventListener('submit', (e) => {
     else {
       try {
         saveProxy(proxy);
-        lookMsg = { text: proxy ? 'Saved on this device.' : 'No proxy of your own is set.', tone: 'ok' };
+        lookMsg = { text: proxy ? 'Saved on this device.' : 'The vessel builder’s own proxy is used.', tone: 'ok' };
       } catch {
         lookMsg = { text: 'This browser will not store anything (private browsing?).', tone: 'err' };
       }

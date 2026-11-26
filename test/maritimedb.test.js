@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseVesselPage, kindFromType, validImo, proxyBase, lookupUrl, lookupImo, loadProxy, saveProxy, MARITIME_KEY } from '../public/maritimedb.js';
+import { parseVesselPage, kindFromType, validImo, proxyBase, lookupUrl, lookupImo, loadProxy, saveProxy, MARITIME_KEY, PROXY } from '../public/maritimedb.js';
 
 // The part of a vessel's page on maritime-database.com that is read: Next.js's page data.
 const page = (vessel) => `<!DOCTYPE html><html><head><title>SANDOY - Maritime Database</title></head><body>
@@ -55,10 +55,11 @@ test('the site\'s ship types become the builder\'s kinds', () => {
   assert.equal(kindFromType('Unknown'), '');
 });
 
-test('the proxy: the one set, else the local server\'s, else none', () => {
+test('the proxy: the one set, else the local server\'s, else the worker', () => {
   assert.equal(proxyBase('https://x.workers.dev', { hostname: 'joranlager.github.io' }), 'https://x.workers.dev/');
   assert.equal(proxyBase('', { hostname: 'localhost' }), '/maritime/');
-  assert.equal(proxyBase('', { hostname: 'joranlager.github.io' }), '');
+  assert.equal(proxyBase('', { hostname: 'joranlager.github.io' }), PROXY);
+  assert.match(PROXY, /^https:\/\/.+\/$/);
   assert.equal(lookupUrl('9894923', '/maritime/'), '/maritime/vessel/imo:9894923');
   const store = new Map();
   const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };

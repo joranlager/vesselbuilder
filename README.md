@@ -29,9 +29,10 @@ page. Live at **https://joranlager.github.io/vesselbuilder/**.
   call sign, flag, type, length, beam, gross tonnage, year built and draught are read from her page
   on [maritime-database.com](https://maritime-database.com/). They fill in what is not typed in by
   hand nor given by her AIS report. That site lets no other site's page read it, so it is asked
-  through a proxy: `npm start` is one (`/maritime/`); for GitHub Pages, deploy
-  [proxy/maritime-worker.js](proxy/maritime-worker.js) as a Cloudflare Worker and give its address in
-  Settings → Vessel lookup.
+  through a proxy: `npm start` is one (`/maritime/`); elsewhere the Cloudflare Worker
+  [proxy/maritime-worker.js](proxy/maritime-worker.js), at
+  `vesselbuilder-maritime.vesselbuilder.workers.dev` (deploy changes with
+  `npx wrangler@4 deploy --config proxy/wrangler.toml`). Another can be given in Settings → Vessel lookup.
 
 A vessel can be given in the address, so other apps can link to her:
 `?name=SANDOY&mmsi=257125930&imo=9894923&callsign=LGCX&length=43&beam=11&draught=3.2&type=69`
